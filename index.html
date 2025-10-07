@@ -26,17 +26,16 @@
             padding: 0;
             box-sizing: border-box;
         }
+        
+        /* Enable smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
 
         body {
             font-family: var(--font-family);
             background-color: var(--primary-bg);
             color: var(--text-color);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            overflow: hidden; /* Hide scrollbars caused by canvas */
             text-align: center;
         }
 
@@ -47,25 +46,35 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: -1; /* Place canvas behind all other content */
+            z-index: -1;
         }
 
-        /* Main Content Container */
+        /* Hero Section (First screen) */
+        .hero-section {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Takes full viewport height */
+            position: relative; /* For positioning the scroll arrow */
+        }
+        
         .container {
             max-width: 800px;
-            padding: 2rem;
+            width: 90%;
+            padding: 1rem;
             z-index: 1;
         }
 
         /* Animated Headline (H1) */
         .main-headline {
-            font-size: 4.5rem;
+            font-size: clamp(2.5rem, 10vw, 4.5rem);
             font-weight: 700;
             letter-spacing: 2px;
             margin-bottom: 1rem;
+            line-height: 1.2;
         }
 
-        /* Each letter is a span for individual animation */
         .main-headline span {
             opacity: 0;
             display: inline-block;
@@ -82,11 +91,14 @@
 
         /* Sub-headline (P) */
         .sub-headline {
-            font-size: 1.25rem;
+            font-size: clamp(1rem, 4vw, 1.25rem);
             font-weight: 300;
             margin-bottom: 2.5rem;
-            opacity: 0; /* Initially hidden */
-            animation: fadeInSubheadline 1s forwards 1s; /* Starts after H1 animation */
+            opacity: 0;
+            animation: fadeInSubheadline 1s forwards 1s;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         @keyframes fadeInSubheadline {
@@ -101,7 +113,7 @@
             justify-content: center;
             align-items: center;
             gap: 0.5rem;
-            flex-wrap: wrap; /* Allow wrapping on small screens */
+            flex-wrap: wrap;
         }
 
         .email-input {
@@ -146,12 +158,70 @@
             box-shadow: 0 5px 20px var(--accent-glow);
         }
 
-        /* Footer */
-        footer {
+        /* Scroll Down Arrow */
+        .scroll-down {
             position: absolute;
             bottom: 2rem;
-            width: 100%;
-            z-index: 1;
+            left: 50%;
+            transform: translateX(-50%);
+            color: var(--accent-color);
+            font-size: 2rem;
+            animation: bounce 2s infinite;
+            z-index: 2;
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateX(-50%) translateY(0);
+            }
+            40% {
+                transform: translateX(-50%) translateY(-20px);
+            }
+            60% {
+                transform: translateX(-50%) translateY(-10px);
+            }
+        }
+
+        /* Contact Section */
+        .contact-section {
+            min-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 4rem 1rem;
+        }
+
+        .contact-section h2 {
+            font-size: clamp(2rem, 8vw, 3.5rem);
+            margin-bottom: 1.5rem;
+            color: var(--text-color);
+        }
+
+        .contact-email {
+            font-family: var(--font-family);
+            background-color: transparent;
+            border: 2px solid var(--accent-color);
+            color: var(--accent-color);
+            border-radius: 5px;
+            padding: 0.75rem 1.5rem;
+            font-size: clamp(1rem, 4vw, 1.25rem);
+            font-weight: 400;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .contact-email:hover {
+            background-color: var(--accent-color);
+            color: var(--primary-bg);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        /* Footer */
+        footer {
+            padding: 2rem 1rem;
+            background-color: #0c1012; /* Slightly different from main bg */
         }
 
         .social-links a {
@@ -172,17 +242,20 @@
             font-size: 0.8rem;
             color: rgba(255, 255, 255, 0.5);
         }
+        
+        .copyright a {
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s;
+        }
+        
+        .copyright a:hover {
+            color: #f0f0f0;
+        }
 
         /* Responsive Design */
-        @media (max-width: 768px) {
-            .main-headline {
-                font-size: 3rem;
-            }
-
-            .sub-headline {
-                font-size: 1rem;
-            }
-
+        @media (max-width: 600px) {
             .subscription-form {
                 flex-direction: column;
                 width: 100%;
@@ -190,7 +263,7 @@
 
             .email-input,
             .notify-button {
-                width: 90%;
+                width: 100%;
             }
         }
     </style>
@@ -199,25 +272,37 @@
 
     <canvas id="particle-canvas"></canvas>
 
-    <main class="container">
-        <h1 class="main-headline" id="main-headline">Paryatan tech</h1>
-        <p class="sub-headline">
-            Revolutionizing the future of travel. Our new platform is launching soon.
-        </p>
+    <section class="hero-section">
+        <main class="container">
+            <h1 class="main-headline" id="main-headline">Paryatan Tech</h1>
+            <p class="sub-headline">
+                Revolutionizing the future of travel. Our new platform is launching soon.
+            </p>
+    
+            <form class="subscription-form" id="notify-form">
+                <input type="email" class="email-input" placeholder="Enter your email to get notified" required>
+                <button type="submit" class="notify-button">Notify Me</button>
+            </form>
+        </main>
+        
+        <a href="#contact" class="scroll-down" aria-label="Scroll to contact section">
+            <i class="fas fa-chevron-down"></i>
+        </a>
+    </section>
 
-        <form class="subscription-form" id="notify-form">
-            <input type="email" class="email-input" placeholder="Enter your email to get notified" required>
-            <button type="submit" class="notify-button">Notify Me</button>
-        </form>
-    </main>
+    <section id="contact" class="contact-section">
+        <h2>Get In Touch...!</h2>
+        <a href="mailto:cto@paryatan.tech" class="contact-email">cto@paryatan.tech</a>
+    </section>
 
     <footer>
         <div class="social-links">
             <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
             <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-            <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
         </div>
-        <p class="copyright">&copy; 2025 Paryatan.tech | All Rights Reserved.</p>
+        <p class="copyright">
+            &copy; 2025 <a href="https://siddhesh.site" target="_blank" rel="noopener noreferrer">Siddhesh Chaube</a> | All Rights Reserved.
+        </p>
     </footer>
 
     <script>
@@ -228,11 +313,10 @@
             const text = headline.textContent;
             headline.textContent = ''; // Clear original text
 
-            // Wrap each letter in a span and add animation delay
             text.split('').forEach((char, index) => {
                 const span = document.createElement('span');
                 if (char === ' ') {
-                    span.innerHTML = '&nbsp;'; // Handle spaces
+                    span.innerHTML = '&nbsp;';
                 } else {
                     span.textContent = char;
                 }
@@ -243,26 +327,23 @@
             // --- FORM SUBMISSION SCRIPT ---
             const form = document.getElementById('notify-form');
             form.addEventListener('submit', (e) => {
-                e.preventDefault(); // Prevent actual form submission
+                e.preventDefault();
                 const emailInput = form.querySelector('.email-input');
                 alert(`Thank you! We will notify ${emailInput.value} when we launch.`);
-                emailInput.value = ''; // Clear the input field
+                emailInput.value = '';
             });
 
             // --- BACKGROUND PARTICLE ANIMATION SCRIPT ---
             const canvas = document.getElementById('particle-canvas');
             const ctx = canvas.getContext('2d');
-
             let particlesArray;
 
-            // Set canvas size to full window size
             function setCanvasSize() {
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
             }
             setCanvasSize();
 
-            // Particle class
             class Particle {
                 constructor(x, y, directionX, directionY, size, color) {
                     this.x = x;
@@ -273,7 +354,6 @@
                     this.color = color;
                 }
 
-                // Method to draw individual particle
                 draw() {
                     ctx.beginPath();
                     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
@@ -281,7 +361,6 @@
                     ctx.fill();
                 }
 
-                // Method to update particle position
                 update() {
                     if (this.x > canvas.width || this.x < 0) {
                         this.directionX = -this.directionX;
@@ -295,7 +374,6 @@
                 }
             }
 
-            // Create particle array
             function init() {
                 particlesArray = [];
                 let numberOfParticles = (canvas.height * canvas.width) / 9000;
@@ -306,23 +384,19 @@
                     let directionX = (Math.random() * 0.4) - 0.2;
                     let directionY = (Math.random() * 0.4) - 0.2;
                     let color = 'rgba(0, 253, 220, 0.5)';
-
                     particlesArray.push(new Particle(x, y, directionX, directionY, size, color));
                 }
             }
 
-            // Animation loop
             function animate() {
                 requestAnimationFrame(animate);
                 ctx.clearRect(0, 0, innerWidth, innerHeight);
-
                 for (let i = 0; i < particlesArray.length; i++) {
                     particlesArray[i].update();
                 }
                 connect();
             }
 
-            // Function to draw lines between nearby particles
             function connect() {
                 let opacityValue = 1;
                 for (let a = 0; a < particlesArray.length; a++) {
@@ -343,7 +417,6 @@
                 }
             }
             
-            // Recalculate canvas and particles on window resize
             window.addEventListener('resize', () => {
                 setCanvasSize();
                 init();
