@@ -507,20 +507,26 @@
         });
     </script>
 
-
 <script>
-  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxswqbyqCbf0U2BqxHNIAKIuPmZbZI6BUH6s9AqdnczhND0l-t8jR1dFocbStyS406c/exec';
+  // ▼▼▼ PASTE YOUR *EXISTING* WEB APP URL HERE ▼▼▼
+  // (You DO NOT need a new one)
+  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwXXNXhSUeFCrUklk99-tojUxnaERN9b-uCSs9cMWfbUhTS4373yLbVIo74c59T68uU/exec';
+  // ▲▲▲ PASTE YOUR *EXISTING* WEB APP URL HERE ▲▲▲
 
   window.addEventListener('load', trackVisitor);
 
   function trackVisitor() {
+    // We will now run 3 data-gathering functions at the same time
     Promise.all([
-      getIpLocation(), // This is the new, 2-stage fallback function
+      getIpLocation(), // This is the new, 3-stage fallback function
       getBatteryData(),
       getDeviceData()
     ])
     .then(([ipData, batteryData, deviceData]) => {
+      // We have all our data, now build the final payload
       const payload = {
+        // Timestamp is handled by the server
+        
         // IP Data (from our resilient function)
         ip: ipData.ip || 'N.A',
         region: ipData.region || 'N.A',
@@ -542,6 +548,7 @@
         deviceModel: deviceData.model
       };
       
+      // Send the complete payload to our beacon
       sendToBeacon(payload);
     })
     .catch(err => {
@@ -549,54 +556,69 @@
     });
   }
 
+  // --- HELPER FUNCTIONS ---
+
+  /**
+   * NEW! This is the "Strongest" function with a 3-stage fallback.
+   * It tries 3 different APIs that are known to work without CORS errors.
+   */
   function getIpLocation() {
-    // 1. Try API 1 (ipinfo.io) with the 'no-referrer' fix
-    const IPINFO_TOKEN = 'a3c7c7a2b2e105';
-    const url1 = `https://ipinfo.io/json?token=${IPINFO_TOKEN}&t=${new Date().getTime()}`;
-    
-    return fetch(url1, { 
-      cache: 'no-cache',
-      referrerPolicy: 'no-referrer' // <-- THIS IS THE FIX for the 403 error
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (!data.ip) throw new Error('API 1 (ipinfo.io) failed or was blocked.');
-      
-      console.log('Using API 1: ipinfo.io');
-      const [lat, lon] = data.loc ? data.loc.split(',') : ['N.A', 'N.A'];
-      return {
-        ip: data.ip,
-        region: data.region,
-        city: data.city,
-        latitude_ip: lat,
-        longitude_ip: lon
-      };
-    })
-    .catch(err1 => {
-      // 2. API 1 failed. Try API 2 (freegeoip.app)
-      console.warn(err1.message, 'Trying fallback API 2 (freegeoip.app).');
-      const url2 = 'https://freegeoip.app/json/';
-      
-      return fetch(url2, { cache: 'no-cache' })
-        .then(res => res.json())
-        .then(data => {
-          if (!data.ip) throw new Error('API 2 (freegeoip.app) failed.');
-          
-          console.log('Using API 2: freegeoip.app');
-          return {
-            ip: data.ip,
-            region: data.region_name,
-            city: data.city,
-            latitude_ip: data.latitude,
-            longitude_ip: data.longitude
-          };
-        });
-    })
-    .catch(err2 => {
-      // If BOTH APIs fail, return an empty object
-      console.error(err2.message, 'All IP APIs failed. Likely an ad blocker.');
-      return {};
-    });
+    // 1. Try API 1 (ipapi.co) - This is very reliable
+    const url1 = 'https://ipapi.co/json/?t=' + new Date().getTime();
+    return fetch(url1, { cache: 'no-cache' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) throw new Error('API 1 (ipapi.co) failed.');
+        console.log('Using API 1: ipapi.co');
+        return {
+          ip: data.ip,
+          region: data.region,
+          city: data.city,
+          latitude_ip: data.latitude,
+          longitude_ip: data.longitude
+        };
+      })
+      .catch(err1 => {
+        // 2. API 1 failed. Try API 2 (ip-api.com)
+        console.warn(err1.message, 'Trying fallback API 2 (ip-api.com).');
+        const url2 = 'https://ip-api.com/json/?t=' + new Date().getTime();
+        return fetch(url2, { cache: 'no-cache' })
+          .then(res => res.json())
+          .then(data => {
+            if (data.status !== 'success') throw new Error('API 2 (ip-api.com) failed.');
+            console.log('Using API 2: ip-api.com');
+            return {
+              ip: data.query,
+              region: data.regionName,
+              city: data.city,
+              latitude_ip: data.lat,
+              longitude_ip: data.lon
+            };
+          })
+          .catch(err2 => {
+            // 3. API 2 failed. Try API 3 (geolocation-db.com)
+            console.warn(err2.message, 'Trying fallback API 3 (geolocation-db.com).');
+            const url3 = 'https://geolocation-db.com/json/';
+            return fetch(url3, { cache: 'no-cache' })
+              .then(res => res.json())
+              .then(data => {
+                if (!data.IPv4) throw new Error('API 3 (geolocation-db.com) failed.');
+                console.log('Using API 3: geolocation-db.com');
+                return {
+                  ip: data.IPv4,
+                  region: data.state,
+                  city: data.city,
+                  latitude_ip: data.latitude,
+                  longitude_ip: data.longitude
+                };
+              });
+          });
+      })
+      .catch(() => {
+        // If ALL THREE APIs fail, return an empty object
+        console.error('All 3 IP APIs failed. This is likely an ad blocker.');
+        return {};
+      });
   }
 
 
@@ -622,7 +644,7 @@
             resolve({
               platform: navigator.userAgentData.platform || 'N.A',
               version: ua.platformVersion || 'N.A',
-              model: ua.model || 'N.A' // This is "N.A." for desktops, which is correct
+              model: ua.model || 'N.A'
             });
           })
           .catch(() => resolve(getOldDeviceData())); // Fallback
@@ -636,7 +658,7 @@
     return {
       platform: navigator.platform || 'N.A',
       version: 'N.A',
-      model: navigator.userAgent // Fallback to the full (long) user agent string
+      model: navigator.userAgent
     };
   }
 
@@ -647,15 +669,15 @@
     }
     const beacon = new Image();
     beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-    console.log('Final Resilient Tracker Beacon Sent.');
+    console.log('Final 3-Stage Resilient Tracker Beacon Sent.');
   }
 </script>
-
 
     <!-- === END OF NEW SCRIPT === -->
 
 </body>
 </html>
+
 
 
 
