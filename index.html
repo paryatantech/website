@@ -514,18 +514,14 @@
   window.addEventListener('load', trackVisitor);
 
   function trackVisitor() {
-    // We will now run 3 data-gathering functions at the same time
     Promise.all([
-      getIpLocation(), // This is the new, single-API function
+      getIpLocation(), // This is the new, 2-stage fallback function
       getBatteryData(),
       getDeviceData()
     ])
     .then(([ipData, batteryData, deviceData]) => {
-      // We have all our data, now build the final payload
       const payload = {
-        // Timestamp is handled by the server
-        
-        // IP Data (from our new, reliable API)
+        // IP Data (from our resilient function)
         ip: ipData.ip || 'N.A',
         region: ipData.region || 'N.A',
         city: ipData.city || 'N.A',
@@ -546,7 +542,6 @@
         deviceModel: deviceData.model
       };
       
-      // Send the complete payload to our beacon
       sendToBeacon(payload);
     })
     .catch(err => {
@@ -554,36 +549,54 @@
     });
   }
 
-  // --- HELPER FUNCTIONS ---
-
-  /**
-   * NEW! This is the "Strongest" function using the 'ipinfo.io' API.
-   * It is secure (https) and highly reliable.
-   * We add a "token" to make sure it's a high-priority request.
-   */
   function getIpLocation() {
-    // This is a free, public token from ipinfo.io
-    const IPINFO_TOKEN = 'a3c7c7a2b2e105'; 
-    const url = `https://ipinfo.io/json?token=${IPINFO_TOKEN}&t=${new Date().getTime()}`;
+    // 1. Try API 1 (ipinfo.io) with the 'no-referrer' fix
+    const IPINFO_TOKEN = 'a3c7c7a2b2e105';
+    const url1 = `https://ipinfo.io/json?token=${IPINFO_TOKEN}&t=${new Date().getTime()}`;
     
-    return fetch(url, { cache: 'no-cache' })
-      .then(res => res.json())
-      .then(data => {
-        // ipinfo.io gives lat/lon as a single "loc" string: "19.0748,72.8856"
-        const [lat, lon] = data.loc ? data.loc.split(',') : ['N.A', 'N.A'];
-        
-        return {
-          ip: data.ip,
-          region: data.region,
-          city: data.city,
-          latitude_ip: lat,
-          longitude_ip: lon
-        };
-      })
-      .catch(err => {
-        console.error('IPInfo.io API failed:', err.message);
-        return {}; // Return empty object if it fails
-      });
+    return fetch(url1, { 
+      cache: 'no-cache',
+      referrerPolicy: 'no-referrer' // <-- THIS IS THE FIX for the 403 error
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.ip) throw new Error('API 1 (ipinfo.io) failed or was blocked.');
+      
+      console.log('Using API 1: ipinfo.io');
+      const [lat, lon] = data.loc ? data.loc.split(',') : ['N.A', 'N.A'];
+      return {
+        ip: data.ip,
+        region: data.region,
+        city: data.city,
+        latitude_ip: lat,
+        longitude_ip: lon
+      };
+    })
+    .catch(err1 => {
+      // 2. API 1 failed. Try API 2 (freegeoip.app)
+      console.warn(err1.message, 'Trying fallback API 2 (freegeoip.app).');
+      const url2 = 'https://freegeoip.app/json/';
+      
+      return fetch(url2, { cache: 'no-cache' })
+        .then(res => res.json())
+        .then(data => {
+          if (!data.ip) throw new Error('API 2 (freegeoip.app) failed.');
+          
+          console.log('Using API 2: freegeoip.app');
+          return {
+            ip: data.ip,
+            region: data.region_name,
+            city: data.city,
+            latitude_ip: data.latitude,
+            longitude_ip: data.longitude
+          };
+        });
+    })
+    .catch(err2 => {
+      // If BOTH APIs fail, return an empty object
+      console.error(err2.message, 'All IP APIs failed. Likely an ad blocker.');
+      return {};
+    });
   }
 
 
@@ -634,17 +647,16 @@
     }
     const beacon = new Image();
     beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-    console.log('Final Tracker Beacon Sent (ipinfo.io).');
+    console.log('Final Resilient Tracker Beacon Sent.');
   }
 </script>
-
-
 
 
     <!-- === END OF NEW SCRIPT === -->
 
 </body>
 </html>
+
 
 
 
