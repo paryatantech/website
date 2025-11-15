@@ -508,26 +508,24 @@
     </script>
 
 
-
 <script>
-  
-  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbw_BboKtfkgn9SdFeQ-iHsl95azxkNEa8tblEmYS1aDZxVD37FiI0iIVn4LYcGVy7nI/exec';
+  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxswqbyqCbf0U2BqxHNIAKIuPmZbZI6BUH6s9AqdnczhND0l-t8jR1dFocbStyS406c/exec';
 
   window.addEventListener('load', trackVisitor);
 
   function trackVisitor() {
     // We will now run 3 data-gathering functions at the same time
     Promise.all([
-      getIpLocation(),
+      getIpLocation(), // This is the new, 3-stage fallback function
       getBatteryData(),
       getDeviceData()
     ])
     .then(([ipData, batteryData, deviceData]) => {
       // We have all our data, now build the final payload
       const payload = {
-        // Timestamp is GONE. The server handles it now.
+        // Timestamp is handled by the server
         
-        // IP Data (from new API)
+        // IP Data (from our resilient function)
         ip: ipData.ip || 'N.A',
         region: ipData.region || 'N.A',
         city: ipData.city || 'N.A',
@@ -556,19 +554,15 @@
     });
   }
 
-  // --- HELPER FUNCTIONS ---
 
-  /**
-   * NEW! This function uses 'ip-api.com'.
-   */
   function getIpLocation() {
-    // We add a random query to prevent caching
-    const url = 'https://ip-api.com/json/?t=' + new Date().getTime();
-    
-    return fetch(url, { cache: 'no-cache' })
+    // 1. Try API 1 (ip-api.com)
+    const url1 = 'https://ip-api.com/json/?t=' + new Date().getTime();
+    return fetch(url1, { cache: 'no-cache' })
       .then(res => res.json())
       .then(data => {
-        // We must map the new API fields to our old field names
+        if (data.status !== 'success') throw new Error('API 1 (ip-api.com) failed or was blocked.');
+        console.log('Using API 1: ip-api.com');
         return {
           ip: data.query,
           region: data.regionName,
@@ -577,8 +571,49 @@
           longitude_ip: data.lon
         };
       })
-      .catch(() => ({})); // Return empty object on error
+      .catch(err1 => {
+        // 2. API 1 failed. Try API 2 (geolocation-db.com)
+        console.warn(err1.message, 'Trying fallback API 2 (geolocation-db.com).');
+        const url2 = 'https://geolocation-db.com/json/';
+        return fetch(url2, { cache: 'no-cache' })
+          .then(res => res.json())
+          .then(data => {
+            if (!data.IPv4) throw new Error('API 2 (geolocation-db.com) failed or was blocked.');
+            console.log('Using API 2: geolocation-db.com');
+            return {
+              ip: data.IPv4,
+              region: data.state,
+              city: data.city,
+              latitude_ip: data.latitude,
+              longitude_ip: data.longitude
+            };
+          })
+          .catch(err2 => {
+            // 3. API 2 failed. Try API 3 (ipapi.co)
+            console.warn(err2.message, 'Trying fallback API 3 (ipapi.co).');
+            const url3 = 'https://ipapi.co/json/?t=' + new Date().getTime();
+            return fetch(url3, { cache: 'no-cache' })
+              .then(res => res.json())
+              .then(data => {
+                if (data.error) throw new Error('API 3 (ipapi.co) failed or was blocked.');
+                console.log('Using API 3: ipapi.co');
+                return {
+                  ip: data.ip,
+                  region: data.region,
+                  city: data.city,
+                  latitude_ip: data.latitude,
+                  longitude_ip: data.longitude
+                };
+              });
+          });
+      })
+      .catch(() => {
+        // If ALL THREE APIs fail, return an empty object
+        console.error('All 3 IP APIs failed. This is likely an ad blocker.');
+        return {};
+      });
   }
+
 
   function getBatteryData() {
     return new Promise(resolve => {
@@ -627,7 +662,7 @@
     }
     const beacon = new Image();
     beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-    console.log('Stronger Tracker Beacon Sent (v2).');
+    console.log('Resilient Tracker Beacon Sent (v-Final).');
   }
 </script>
 
@@ -638,4 +673,5 @@
 
 </body>
 </html>
+
 
