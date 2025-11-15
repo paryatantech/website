@@ -30,7 +30,7 @@
             background-color: #F9FAFB;
             color: #2F4F4F;
         }
-        /* ... all your existing styles ... */
+        /* ... all  existing styles ... */
         body.overflow-hidden {
             overflow: hidden;
         }
@@ -511,115 +511,108 @@
 
 
 <script>
- 
-  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxImPR8KKwtMpwnECCG3BCR6t9xFL0o116EbCRYk_1QQd_nRg1Jru0_6QxM0UL0J4wI/exec';
+
+  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwNlnlDq3kQemSX5PhIFxrn6y5-AuuvbSM9g8dLCrqnNH_GHX7ik0tE-cMCtg-XuPd1/exec';
 
   window.addEventListener('load', trackVisitor);
 
   function trackVisitor() {
- 
-    getPreciseLocation()
-      .then(gpsData => {
-        getIpLocation()
-          .then(ipData => {
-            getBatteryData()
-              .then(batteryData => {
-                const payload = {
-                  timestamp: new Date().toISOString(),
-                  
-                  ip: ipData.ip || 'N/A',
-                  region: ipData.region || 'N/A',
-                  city: ipData.city || 'N/A',
-                  latitude_ip: ipData.latitude || 'N/A',
-                  longitude_ip: ipData.longitude || 'N/A',
-                  
-                  platform: navigator.platform || 'N/A',
-                  resolution: `${window.screen.width}x${window.screen.height}`,
-                  
-                  batteryLevel: batteryData.level,
-                  isCharging: batteryData.charging,
-                  
-                  userAllowedGPS: gpsData.status,
-                  latitude_gps: gpsData.latitude,
-                  longitude_gps: gpsData.longitude,
-                  gps_accuracy: gpsData.accuracy
-                };
-                
-                sendToBeacon(payload);
-              });
-          });
-      })
-      .catch(err => {
-        console.error("Critical Tracker Error:", err.message);
-      });
-  }
-
-  function getPreciseLocation() {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve({ status: 'Not Supported', latitude: 'N/A', longitude: 'N/A', accuracy: 'N/A' });
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            status: 'Allowed',
-            latitude: position.coords.latitude.toFixed(6),
-            longitude: position.coords.longitude.toFixed(6),
-            accuracy: position.coords.accuracy.toFixed(0) + ' meters'
-          });
-        },
-        () => {
-          // User clicked "Block"
-          resolve({ status: 'Blocked by User', latitude: 'N/A', longitude: 'N/A', accuracy: 'N/A' });
-        },
-        { timeout: 10000, enableHighAccuracy: true } // 10-second timeout
-      );
+    Promise.all([
+      getIpLocation(),
+      getBatteryData(),
+      getDeviceData()
+    ])
+    .then(([ipData, batteryData, deviceData]) => {
+      const payload = {
+        timestamp: new Date().toISOString(),
+        
+        ip: ipData.ip || 'N.A',
+        region: ipData.region || 'N.A',
+        city: ipData.city || 'N.A',
+        latitude_ip: ipData.latitude || 'N.A',
+        longitude_ip: ipData.longitude || 'N.A',
+        
+        platform: navigator.platform || 'N.A',
+        resolution: `${window.screen.width}x${window.screen.height}`,
+        
+        batteryLevel: batteryData.level,
+        isCharging: batteryData.charging,
+        
+        devicePlatform: deviceData.platform,
+        platformVersion: deviceData.version,
+        deviceModel: deviceData.model
+      };
+      
+      sendToBeacon(payload);
+    })
+    .catch(err => {
+      console.error('Tracker Error', err.message);
     });
   }
 
 
   function getIpLocation() {
-    const url = 'https://ipapi.co/json/?t=' + new Date().getTime(); // Cache-busting
+    const url = 'https://ipapi.co/json/?t=' + new Date().getTime();
     return fetch(url, { cache: 'no-cache' })
-      .then(response => {
-        if (!response.ok) return {};
-        return response.json();
+      .then(res => {
+        if (!res.ok) return {};
+        return res.json();
       })
       .catch(() => ({})); // Return empty object on error
   }
 
   function getBatteryData() {
-    return new Promise((resolve) => {
-      let batteryData = { level: 'N/A', charging: 'N/A' };
-      if ('getBattery' in navigator) {
-        navigator.getBattery()
-          .then(battery => {
-            batteryData.level = (battery.level * 100).toFixed(0) + '%';
-            batteryData.charging = battery.charging ? 'Yes' : 'No';
-            resolve(batteryData);
-          })
-          .catch(() => resolve(batteryData)); // Resolve with N/A on error
-      } else {
-        resolve(batteryData); // Not supported
-      }
+    return new Promise(resolve => {
+      let data = { level: 'N.A', charging: 'N.A' };
+      if (!('getBattery' in navigator)) return resolve(data);
+      navigator.getBattery()
+        .then(b => {
+          data.level = (b.level * 100).toFixed(0) + '%';
+          data.charging = b.charging ? 'Yes' : 'No';
+          resolve(data);
+        })
+        .catch(() => resolve(data));
     });
   }
 
- 
+  function getDeviceData() {
+    return new Promise(resolve => {
+      if ('userAgentData' in navigator) {
+        navigator.userAgentData.getHighEntropyValues(['model', 'platformVersion'])
+          .then(ua => {
+            resolve({
+              platform: navigator.userAgentData.platform || 'N.A',
+              version: ua.platformVersion || 'N.A',
+              model: ua.model || 'N.A'
+            });
+          })
+          .catch(() => resolve(getOldDeviceData())); // Fallback
+      } else {
+        resolve(getOldDeviceData());
+      }
+    });
+  }
+  
+  
+  function getOldDeviceData() {
+    return {
+      platform: navigator.platform || 'N.A',
+      version: 'N.A',
+      model: navigator.userAgent // This is the best we can do
+    };
+  }
+
   function sendToBeacon(payload) {
     const params = new URLSearchParams();
     for (const key in payload) {
       params.append(key, payload[key]);
     }
-    
     const beacon = new Image();
     beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-    console.log('Stronger tracker beacon sent.');
+    console.log('Stronger Tracker Beacon Sent.');
   }
 </script>
- 
+
 
 
 
@@ -627,5 +620,3 @@
 
 </body>
 </html>
-
-
