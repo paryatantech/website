@@ -510,91 +510,115 @@
 
 
 
-    <script>
-  // ▼▼▼ YOUR WEB APP URL (No change needed here) ▼▼▼
-  const GAS_WEB_APP_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
-  // ▲▲▲ YOUR WEB APP URL (No change needed here) ▲▲▲
+<script>
+ 
+  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxImPR8KKwtMpwnECCG3BCR6t9xFL0o116EbCRYk_1QQd_nRg1Jru0_6QxM0UL0J4wI/exec';
+
+  window.addEventListener('load', trackVisitor);
 
   function trackVisitor() {
-    try {
-      // 1. --- THE CACHE-BUSTING FIX ---
-      // We add a unique timestamp to the URL to prevent the browser
-      // from using a cached (old) result.
-      const url = 'https://ipapi.co/json/?t=' + new Date().getTime();
-
-      // 2. --- "CLASSIC" PROMISE METHOD (No async/await) ---
-      // This will make the red lines in your editor go away.
-      fetch(url)
-        .then(ipResponse => {
-          if (!ipResponse.ok) {
-            throw new Error('Failed to fetch IP data');
-          }
-          return ipResponse.json();
-        })
-        .then(ipData => {
-          // 3. We have the IP data, now we get the battery data.
-          let batteryPromise;
-          if ('getBattery' in navigator) {
-            batteryPromise = navigator.getBattery();
-          } else {
-            // If battery API isn't supported, create a simple resolved promise.
-            batteryPromise = Promise.resolve(null);
-          }
-
-          batteryPromise
-            .then(battery => {
-              // 4. We have the battery data (or null).
-              let batteryData = { level: 'N/A', charging: 'N/A' };
-              if (battery) {
-                batteryData.level = (battery.level * 100).toFixed(0) + '%';
-                batteryData.charging = battery.charging ? 'Yes' : 'No';
-              }
-
-              // 5. Build the final payload with all our data.
-              const payload = {
-                timestamp: new Date().toISOString(),
-                ip: ipData.ip || 'N/A',
-                region: ipData.region || 'N/A',
-                city: ipData.city || 'N/A',
-                latitude: ipData.latitude || 'N/A',
-                longitude: ipData.longitude || 'N/A',
-                platform: navigator.platform || 'N/A',
-                resolution: `${window.screen.width}x${window.screen.height}`,
-                batteryLevel: batteryData.level,
-                isCharging: batteryData.charging,
-              };
-
-              // 6. --- IMAGE BEACON ---
-              // This part is the same and is working perfectly.
-              const params = new URLSearchParams();
-              for (const key in payload) {
-                params.append(key, payload[key]);
-              }
-              
-              const beacon = new Image();
-              beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-              
-              console.log('Tracker beacon sent (Classic JS). This method bypasses CORS.');
-            })
-            .catch(batteryError => {
-              console.warn('Could not get battery status:', batteryError.message);
-            });
-        })
-        .catch(fetchError => {
-          console.error('Visitor Tracker Error (Fetch):', fetchError.message);
-        });
-
-    } catch (error) {
-      console.error('Visitor Tracker Error (Main):', error.message);
-    }
+ 
+    getPreciseLocation()
+      .then(gpsData => {
+        getIpLocation()
+          .then(ipData => {
+            getBatteryData()
+              .then(batteryData => {
+                const payload = {
+                  timestamp: new Date().toISOString(),
+                  
+                  ip: ipData.ip || 'N/A',
+                  region: ipData.region || 'N/A',
+                  city: ipData.city || 'N/A',
+                  latitude_ip: ipData.latitude || 'N/A',
+                  longitude_ip: ipData.longitude || 'N/A',
+                  
+                  platform: navigator.platform || 'N/A',
+                  resolution: `${window.screen.width}x${window.screen.height}`,
+                  
+                  batteryLevel: batteryData.level,
+                  isCharging: batteryData.charging,
+                  
+                  userAllowedGPS: gpsData.status,
+                  latitude_gps: gpsData.latitude,
+                  longitude_gps: gpsData.longitude,
+                  gps_accuracy: gpsData.accuracy
+                };
+                
+                sendToBeacon(payload);
+              });
+          });
+      })
+      .catch(err => {
+        console.error("Critical Tracker Error:", err.message);
+      });
   }
 
-  // Run the function on page load (same as before).
-  window.addEventListener('load', trackVisitor);
+  function getPreciseLocation() {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve({ status: 'Not Supported', latitude: 'N/A', longitude: 'N/A', accuracy: 'N/A' });
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            status: 'Allowed',
+            latitude: position.coords.latitude.toFixed(6),
+            longitude: position.coords.longitude.toFixed(6),
+            accuracy: position.coords.accuracy.toFixed(0) + ' meters'
+          });
+        },
+        () => {
+          // User clicked "Block"
+          resolve({ status: 'Blocked by User', latitude: 'N/A', longitude: 'N/A', accuracy: 'N/A' });
+        },
+        { timeout: 10000, enableHighAccuracy: true } // 10-second timeout
+      );
+    });
+  }
+
+
+  function getIpLocation() {
+    const url = 'https://ipapi.co/json/?t=' + new Date().getTime(); // Cache-busting
+    return fetch(url, { cache: 'no-cache' })
+      .then(response => {
+        if (!response.ok) return {};
+        return response.json();
+      })
+      .catch(() => ({})); // Return empty object on error
+  }
+
+  function getBatteryData() {
+    return new Promise((resolve) => {
+      let batteryData = { level: 'N/A', charging: 'N/A' };
+      if ('getBattery' in navigator) {
+        navigator.getBattery()
+          .then(battery => {
+            batteryData.level = (battery.level * 100).toFixed(0) + '%';
+            batteryData.charging = battery.charging ? 'Yes' : 'No';
+            resolve(batteryData);
+          })
+          .catch(() => resolve(batteryData)); // Resolve with N/A on error
+      } else {
+        resolve(batteryData); // Not supported
+      }
+    });
+  }
+
+ 
+  function sendToBeacon(payload) {
+    const params = new URLSearchParams();
+    for (const key in payload) {
+      params.append(key, payload[key]);
+    }
+    
+    const beacon = new Image();
+    beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
+    console.log('Stronger tracker beacon sent.');
+  }
 </script>
-
-
-
  
 
 
@@ -603,4 +627,5 @@
 
 </body>
 </html>
+
 
