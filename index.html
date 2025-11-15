@@ -509,40 +509,46 @@
 
 
 
-
 <script>
-
-  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwNlnlDq3kQemSX5PhIFxrn6y5-AuuvbSM9g8dLCrqnNH_GHX7ik0tE-cMCtg-XuPd1/exec';
+  
+  const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbw_BboKtfkgn9SdFeQ-iHsl95azxkNEa8tblEmYS1aDZxVD37FiI0iIVn4LYcGVy7nI/exec';
 
   window.addEventListener('load', trackVisitor);
 
   function trackVisitor() {
+    // We will now run 3 data-gathering functions at the same time
     Promise.all([
       getIpLocation(),
       getBatteryData(),
       getDeviceData()
     ])
     .then(([ipData, batteryData, deviceData]) => {
+      // We have all our data, now build the final payload
       const payload = {
-        timestamp: new Date().toISOString(),
+        // Timestamp is GONE. The server handles it now.
         
+        // IP Data (from new API)
         ip: ipData.ip || 'N.A',
         region: ipData.region || 'N.A',
         city: ipData.city || 'N.A',
-        latitude_ip: ipData.latitude || 'N.A',
-        longitude_ip: ipData.longitude || 'N.A',
+        latitude_ip: ipData.latitude_ip || 'N.A',
+        longitude_ip: ipData.longitude_ip || 'N.A',
         
+        // Navigator Data
         platform: navigator.platform || 'N.A',
         resolution: `${window.screen.width}x${window.screen.height}`,
         
+        // Battery Data
         batteryLevel: batteryData.level,
         isCharging: batteryData.charging,
         
+        // Device Data
         devicePlatform: deviceData.platform,
         platformVersion: deviceData.version,
         deviceModel: deviceData.model
       };
       
+      // Send the complete payload to our beacon
       sendToBeacon(payload);
     })
     .catch(err => {
@@ -550,13 +556,26 @@
     });
   }
 
+  // --- HELPER FUNCTIONS ---
 
+  /**
+   * NEW! This function uses 'ip-api.com'.
+   */
   function getIpLocation() {
-    const url = 'https://ipapi.co/json/?t=' + new Date().getTime();
+    // We add a random query to prevent caching
+    const url = 'https://ip-api.com/json/?t=' + new Date().getTime();
+    
     return fetch(url, { cache: 'no-cache' })
-      .then(res => {
-        if (!res.ok) return {};
-        return res.json();
+      .then(res => res.json())
+      .then(data => {
+        // We must map the new API fields to our old field names
+        return {
+          ip: data.query,
+          region: data.regionName,
+          city: data.city,
+          latitude_ip: data.lat,
+          longitude_ip: data.lon
+        };
       })
       .catch(() => ({})); // Return empty object on error
   }
@@ -593,12 +612,11 @@
     });
   }
   
-  
   function getOldDeviceData() {
     return {
       platform: navigator.platform || 'N.A',
       version: 'N.A',
-      model: navigator.userAgent // This is the best we can do
+      model: navigator.userAgent
     };
   }
 
@@ -609,7 +627,7 @@
     }
     const beacon = new Image();
     beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-    console.log('Stronger Tracker Beacon Sent.');
+    console.log('Stronger Tracker Beacon Sent (v2).');
   }
 </script>
 
@@ -620,3 +638,4 @@
 
 </body>
 </html>
+
