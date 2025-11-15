@@ -516,7 +516,7 @@
   function trackVisitor() {
     // We will now run 3 data-gathering functions at the same time
     Promise.all([
-      getIpLocation(), // This is the new, 3-stage fallback function
+      getIpLocation(), // This is the new, single-API function
       getBatteryData(),
       getDeviceData()
     ])
@@ -525,7 +525,7 @@
       const payload = {
         // Timestamp is handled by the server
         
-        // IP Data (from our resilient function)
+        // IP Data (from our new, reliable API)
         ip: ipData.ip || 'N.A',
         region: ipData.region || 'N.A',
         city: ipData.city || 'N.A',
@@ -554,63 +554,35 @@
     });
   }
 
+  // --- HELPER FUNCTIONS ---
 
+  /**
+   * NEW! This is the "Strongest" function using the 'ipinfo.io' API.
+   * It is secure (https) and highly reliable.
+   * We add a "token" to make sure it's a high-priority request.
+   */
   function getIpLocation() {
-    // 1. Try API 1 (ip-api.com)
-    const url1 = 'https://ip-api.com/json/?t=' + new Date().getTime();
-    return fetch(url1, { cache: 'no-cache' })
+    // This is a free, public token from ipinfo.io
+    const IPINFO_TOKEN = 'a3c7c7a2b2e105'; 
+    const url = `https://ipinfo.io/json?token=${IPINFO_TOKEN}&t=${new Date().getTime()}`;
+    
+    return fetch(url, { cache: 'no-cache' })
       .then(res => res.json())
       .then(data => {
-        if (data.status !== 'success') throw new Error('API 1 (ip-api.com) failed or was blocked.');
-        console.log('Using API 1: ip-api.com');
+        // ipinfo.io gives lat/lon as a single "loc" string: "19.0748,72.8856"
+        const [lat, lon] = data.loc ? data.loc.split(',') : ['N.A', 'N.A'];
+        
         return {
-          ip: data.query,
-          region: data.regionName,
+          ip: data.ip,
+          region: data.region,
           city: data.city,
-          latitude_ip: data.lat,
-          longitude_ip: data.lon
+          latitude_ip: lat,
+          longitude_ip: lon
         };
       })
-      .catch(err1 => {
-        // 2. API 1 failed. Try API 2 (geolocation-db.com)
-        console.warn(err1.message, 'Trying fallback API 2 (geolocation-db.com).');
-        const url2 = 'https://geolocation-db.com/json/';
-        return fetch(url2, { cache: 'no-cache' })
-          .then(res => res.json())
-          .then(data => {
-            if (!data.IPv4) throw new Error('API 2 (geolocation-db.com) failed or was blocked.');
-            console.log('Using API 2: geolocation-db.com');
-            return {
-              ip: data.IPv4,
-              region: data.state,
-              city: data.city,
-              latitude_ip: data.latitude,
-              longitude_ip: data.longitude
-            };
-          })
-          .catch(err2 => {
-            // 3. API 2 failed. Try API 3 (ipapi.co)
-            console.warn(err2.message, 'Trying fallback API 3 (ipapi.co).');
-            const url3 = 'https://ipapi.co/json/?t=' + new Date().getTime();
-            return fetch(url3, { cache: 'no-cache' })
-              .then(res => res.json())
-              .then(data => {
-                if (data.error) throw new Error('API 3 (ipapi.co) failed or was blocked.');
-                console.log('Using API 3: ipapi.co');
-                return {
-                  ip: data.ip,
-                  region: data.region,
-                  city: data.city,
-                  latitude_ip: data.latitude,
-                  longitude_ip: data.longitude
-                };
-              });
-          });
-      })
-      .catch(() => {
-        // If ALL THREE APIs fail, return an empty object
-        console.error('All 3 IP APIs failed. This is likely an ad blocker.');
-        return {};
+      .catch(err => {
+        console.error('IPInfo.io API failed:', err.message);
+        return {}; // Return empty object if it fails
       });
   }
 
@@ -637,7 +609,7 @@
             resolve({
               platform: navigator.userAgentData.platform || 'N.A',
               version: ua.platformVersion || 'N.A',
-              model: ua.model || 'N.A'
+              model: ua.model || 'N.A' // This is "N.A." for desktops, which is correct
             });
           })
           .catch(() => resolve(getOldDeviceData())); // Fallback
@@ -651,7 +623,7 @@
     return {
       platform: navigator.platform || 'N.A',
       version: 'N.A',
-      model: navigator.userAgent
+      model: navigator.userAgent // Fallback to the full (long) user agent string
     };
   }
 
@@ -662,7 +634,7 @@
     }
     const beacon = new Image();
     beacon.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-    console.log('Resilient Tracker Beacon Sent (v-Final).');
+    console.log('Final Tracker Beacon Sent (ipinfo.io).');
   }
 </script>
 
@@ -673,5 +645,6 @@
 
 </body>
 </html>
+
 
 
